@@ -57,6 +57,7 @@ export type SchoolRow = {
   hero_image_url: string | null;
   primary_color: string | null;
   razorpay_key_id: string | null;
+  upi_vpa: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -80,6 +81,7 @@ export type SchoolInsert = {
   hero_image_url?: string | null;
   primary_color?: string | null;
   razorpay_key_id?: string | null;
+  upi_vpa?: string | null;
   is_active?: boolean;
   created_at?: string;
   updated_at?: string;
@@ -746,6 +748,72 @@ export type SyllabusCopyInsert = {
   updated_at?: string;
 }
 
+/* ---------------------------------------------------------- notifications */
+
+export type NotificationType = 'FEE' | 'LEAVE' | 'ATTENDANCE' | 'ANNOUNCEMENT';
+
+export type NotificationRow = {
+  id: string;
+  school_id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  type: NotificationType;
+  link: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export type NotificationInsert = {
+  id?: string;
+  school_id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  type: NotificationType;
+  link?: string | null;
+  is_read?: boolean;
+  created_at?: string;
+}
+
+/* ------------------------------------------------------- UPI payment claims */
+
+export type UpiClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export type UpiPaymentClaimRow = {
+  id: string;
+  school_id: string;
+  student_id: string;
+  amount: number;
+  utr: string;
+  invoice_ref: string | null;
+  status: UpiClaimStatus;
+  submitted_by: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  payment_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type UpiPaymentClaimInsert = {
+  id?: string;
+  school_id: string;
+  student_id: string;
+  amount: number;
+  utr: string;
+  invoice_ref?: string | null;
+  status?: UpiClaimStatus;
+  submitted_by?: string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  review_note?: string | null;
+  payment_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 /* ------------------------------------------------------- dashboard metrics */
 
 export type DashboardMetrics = {
@@ -894,6 +962,18 @@ export type Database = {
         Update: Partial<SyllabusCopyInsert>;
         Relationships: [];
       };
+      notifications: {
+        Row: NotificationRow;
+        Insert: NotificationInsert;
+        Update: Partial<NotificationInsert>;
+        Relationships: [];
+      };
+      upi_payment_claims: {
+        Row: UpiPaymentClaimRow;
+        Insert: UpiPaymentClaimInsert;
+        Update: Partial<UpiPaymentClaimInsert>;
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -932,6 +1012,18 @@ export type Database = {
       school_dashboard_metrics: {
         Args: { target_school: string; target_date?: string };
         Returns: DashboardMetrics[];
+      };
+      review_upi_claim: {
+        Args: { target_claim: string; approve: boolean; note?: string | null };
+        Returns: string | null;
+      };
+      is_member_of: {
+        Args: { target_school: string };
+        Returns: boolean;
+      };
+      is_school_staff: {
+        Args: { target_school: string };
+        Returns: boolean;
       };
     };
     Enums: {
@@ -972,6 +1064,8 @@ export type HallTicket = HallTicketRow;
 export type ExamResult = ExamResultRow;
 export type Holiday = HolidayRow;
 export type SyllabusCopy = SyllabusCopyRow;
+export type Notification = NotificationRow;
+export type UpiPaymentClaim = UpiPaymentClaimRow;
 
 /** A payment joined with the student it settles, as the receipt route reads it. */
 export type FeePaymentWithStudent = FeePayment & {

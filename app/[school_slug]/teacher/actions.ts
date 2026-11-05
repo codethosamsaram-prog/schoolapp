@@ -6,6 +6,7 @@ import type { ActionResult, AttendanceStatus } from '@/types/database';
 import { createClient } from '@/lib/supabase/server';
 import { requireTenantSession } from '@/lib/auth';
 import { sendAbsenceAlert } from '@/lib/whatsapp';
+import { notifyFamilies, wasDelivered } from '@/lib/notifications';
 import { formatDate, todayInIST } from '@/lib/utils';
 
 const entrySchema = z.object({
@@ -125,21 +126,33 @@ export async function submitBulkAttendance(
   if (parsed.data.notifyAbsentees && absentees.length > 0) {
     const dateLabel = formatDate(parsed.data.date);
 
-    // Sequential on purpose: WhatsApp throttles aggressively per number.
-    for (const row of absentees) {
-      const student = known.get(row.student_id);
-      if (!student) continue;
-
-      const result = await sendAbsenceAlert({
-        parentPhone: student.parent_phone,
-        parentName: student.parent_name ?? 'Parent',
-        studentName: student.full_name,
-        schoolName: school.name,
-        date: dateLabel,
-      });
-
-      if (result.ok) notificationsSent += 1;
-    }
+    // In-app to every family with a portal login; WhatsApp only for those
+    // without one (see lib/notifications.ts).
+    const outcomes = await notifyFamilies(
+      absentees.flatMap((row) => {
+        const student = known.get(row.student_id);
+        if (!student) return [];
+        return [
+          {
+            schoolId: school.id,
+            studentId: student.id,
+            type: 'ATTENDANCE' as const,
+            title: 'Marked absent',
+            body: `${student.full_name} was marked absent on ${dateLabel}.`,
+            link: `/${school.slug}/portal`,
+            whatsapp: () =>
+              sendAbsenceAlert({
+                parentPhone: student.parent_phone,
+                parentName: student.parent_name ?? 'Parent',
+                studentName: student.full_name,
+                schoolName: school.name,
+                date: dateLabel,
+              }),
+          },
+        ];
+      }),
+    );
+    notificationsSent = outcomes.filter(wasDelivered).length;
   }
 
   revalidatePath(`/${schoolSlug}/teacher/attendance`);

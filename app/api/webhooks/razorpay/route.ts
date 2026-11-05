@@ -13,6 +13,7 @@ import {
 } from '@/lib/razorpay';
 import { isSettledPayment } from '@/lib/constants';
 import { sendPaymentConfirmation } from '@/lib/whatsapp';
+import { notifyFamily, wasDelivered } from '@/lib/notifications';
 import { receiptPathSuffix } from '@/lib/tokens';
 import { formatINR } from '@/lib/utils';
 
@@ -269,16 +270,27 @@ async function handlePaymentCaptured(
     return ok('Payment settled, notification skipped', { paymentId: settled.id });
   }
 
-  // 9. Confirmation to the parent, with a signed link to the receipt PDF.
-  const notification = await sendPaymentConfirmation({
-    parentPhone: student.parent_phone,
-    parentName: student.parent_name ?? 'Parent',
-    studentName: student.full_name,
-    schoolName: school.name,
-    amountPaid: formatINR(amountInRupees, true),
-    receiptNumber: receiptNumber,
-    outstandingBalance: formatINR(Math.max(Number(student.current_balance), 0), true),
-    receiptPathSuffix: receiptPathSuffix(settled.id),
+  // 9. Confirmation to the family: in the portal, or by WhatsApp with a
+  //    signed link to the receipt PDF when they have no portal login.
+  const outstanding = formatINR(Math.max(Number(student.current_balance), 0), true);
+  const outcome = await notifyFamily({
+    schoolId: school.id,
+    studentId: student.id,
+    type: 'FEE',
+    title: 'Payment received',
+    body: `${formatINR(amountInRupees, true)} received for ${student.full_name}. Receipt ${receiptNumber}. Outstanding: ${outstanding}.`,
+    link: `/${school.slug}/portal/fees`,
+    whatsapp: () =>
+      sendPaymentConfirmation({
+        parentPhone: student.parent_phone,
+        parentName: student.parent_name ?? 'Parent',
+        studentName: student.full_name,
+        schoolName: school.name,
+        amountPaid: formatINR(amountInRupees, true),
+        receiptNumber: receiptNumber,
+        outstandingBalance: outstanding,
+        receiptPathSuffix: receiptPathSuffix(settled.id),
+      }),
   });
 
   console.info('[razorpay] payment settled', {
@@ -287,14 +299,15 @@ async function handlePaymentCaptured(
     school: school.slug,
     amount: amountInRupees,
     receiptNumber,
-    whatsapp: notification.ok ? 'sent' : notification.error,
+    inApp: outcome.inApp,
+    whatsapp: outcome.whatsapp ? (outcome.whatsapp.ok ? 'sent' : outcome.whatsapp.error) : 'not needed',
   });
 
   return ok('Payment settled', {
     paymentId: settled.id,
     receiptNumber,
     balance: student.current_balance,
-    notified: notification.ok,
+    notified: wasDelivered(outcome),
   });
 }
 

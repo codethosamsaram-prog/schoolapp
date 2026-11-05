@@ -42,8 +42,13 @@ export function createClient() {
  * It sends no session cookie, so it sees only what the `anon` policies allow:
  * active schools, their fee schedules, and INSERT into admission_leads.
  */
-export function createAnonClient() {
+export function createAnonClient(options: { fresh?: boolean } = {}) {
   return createServerClient<Database>(publicEnv.supabaseUrl, publicEnv.supabaseAnonKey, {
+    // An anonymous GET has no session headers, so Next's data cache keeps it for
+    // up to a year unless told otherwise. `fresh` is for data that must show edits.
+    ...(options.fresh
+      ? { global: { fetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, { ...init, cache: 'no-store' }) } }
+      : {}),
     cookies: {
       get() {
         return undefined;

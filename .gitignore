@@ -12,3 +12,11 @@ playwright-report
 e2e/.fixtures.json
 logs
 backups
+.env.production
+
+.vercel
+.env*
+!.env.example
+
+# Supabase CLI local state (linked project, local start secrets)
+supabase/.temp

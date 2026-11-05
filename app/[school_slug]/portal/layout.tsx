@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import { GraduationCap } from 'lucide-react';
 import { getPortalContext } from '@/lib/portal';
+import { createClient } from '@/lib/supabase/server';
 import { initials } from '@/lib/utils';
 import { SignOutButton } from '@/components/sign-out-button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChildSwitcher } from './_components/child-switcher';
+import { NotificationBell } from './_components/notification-bell';
 import { PortalNav } from './_components/portal-nav';
 
 interface PortalLayoutProps {
@@ -18,7 +20,12 @@ interface PortalLayoutProps {
  * every page shows the selected child.
  */
 export default async function PortalLayout({ children, params }: PortalLayoutProps) {
-  const { profile, school, students, active } = await getPortalContext(params.school_slug);
+  const { userId, profile, school, students, active } = await getPortalContext(params.school_slug);
+  const { count: unread } = await createClient()
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('is_read', false);
   const portalName = profile.role === 'PARENT' ? 'Parent portal' : 'Student portal';
 
   return (
@@ -34,14 +41,17 @@ export default async function PortalLayout({ children, params }: PortalLayoutPro
               <span className="block text-xs text-muted-foreground">{portalName}</span>
             </span>
           </Link>
-          <div className="flex items-center gap-1 lg:hidden">
-            <span
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-xs font-semibold"
-              title={profile.full_name || profile.email || undefined}
-            >
-              {initials(profile.full_name || profile.email || 'P')}
-            </span>
-            <SignOutButton showLabel={false} />
+          <div className="flex shrink-0 items-center gap-1">
+            <NotificationBell schoolSlug={school.slug} userId={userId} initialUnread={unread ?? 0} />
+            <div className="flex items-center gap-1 lg:hidden">
+              <span
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-xs font-semibold"
+                title={profile.full_name || profile.email || undefined}
+              >
+                {initials(profile.full_name || profile.email || 'P')}
+              </span>
+              <SignOutButton showLabel={false} />
+            </div>
           </div>
         </div>
 

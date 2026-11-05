@@ -189,7 +189,7 @@ export default async function FeesPage({ params, searchParams }: PageProps) {
           schoolSlug={school.slug}
           classes={owingClasses}
           cooldownDays={REMINDER_COOLDOWN_DAYS}
-          enabled={health.remindersReady}
+          whatsappReady={health.remindersReady}
         />
       </header>
 

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { renderToStream } from '@react-pdf/renderer';
+import { pdfResponse } from '@/lib/pdf-archive';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { verifyReceiptToken } from '@/lib/tokens';
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     .filter(Boolean)
     .join(', ');
 
-  const stream = await renderToStream(
+  const document = (
     <FeeReceiptPDF
       school={{
         name: school.name,
@@ -130,17 +130,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       totalFeeDue={Number(student.total_fee_due)}
       balanceAfterPayment={Number(student.current_balance)}
       accentColor={school.primary_color ?? '#1d4ed8'}
-    />,
+    />
   );
 
-  const filename = `receipt-${(payment.receipt_number ?? payment.id).replace(/[^a-zA-Z0-9-]/g, '-')}.pdf`;
-
-  // renderToStream yields a Node stream; NextResponse accepts it as the body.
-  return new NextResponse(stream as unknown as ReadableStream<Uint8Array>, {
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${filename}"`,
-      'Cache-Control': 'private, no-store',
-    },
+  return pdfResponse({
+    document,
+    schoolId: payment.school_id,
+    kind: 'receipts',
+    id: payment.id,
+    filename: `receipt-${(payment.receipt_number ?? payment.id).replace(/[^a-zA-Z0-9-]/g, '-')}.pdf`,
+    disposition: 'inline',
   });
 }

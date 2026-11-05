@@ -12,6 +12,7 @@ import {
   BriefcaseBusiness,
   Bus,
   CalendarOff,
+  QrCode,
 } from 'lucide-react';
 import { requireTenantSession } from '@/lib/auth';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +40,7 @@ export default async function AdminLayout({ children, params }: AdminLayoutProps
     { href: `/${school.slug}/admin/admissions`, label: 'Admissions', icon: UserPlus },
     { href: `/${school.slug}/admin/students`, label: 'Students', icon: Users },
     { href: `/${school.slug}/admin/fees`, label: 'Fees', icon: ReceiptIndianRupee },
+    { href: `/${school.slug}/admin/finance/utr-verification`, label: 'UPI verification', icon: QrCode },
     { href: `/${school.slug}/admin/staff`, label: 'Staff & payroll', icon: BriefcaseBusiness },
     { href: `/${school.slug}/admin/transport`, label: 'Transport', icon: Bus },
     { href: `/${school.slug}/admin/leave`, label: 'Leave approvals', icon: CalendarOff },

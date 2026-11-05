@@ -64,21 +64,21 @@ test.describe('WhatsApp health', () => {
     await signIn(page, 'adminA');
     await page.goto(`/${TENANT_A.slug}/admin/fees?whatsapp=recheck`);
 
-    const banner = page.getByRole('alert').filter({ hasText: 'Fee reminders are turned off' });
+    const banner = page.getByRole('alert').filter({ hasText: 'WhatsApp fee reminders are off' });
     await expect(banner).toBeVisible();
     await expect(banner).toContainText('Fee reminders will not send: template "fee_due_reminder" is rejected');
     await expect(banner.getByText('How to set up WhatsApp')).toBeVisible();
 
     await page.getByRole('button', { name: 'Send fee reminders' }).click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText('WhatsApp is not ready to send fee reminders')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: /^Send \d+ reminder/ })).toBeDisabled();
+    // In-app reminders still go out; only families without a login miss out.
+    await expect(dialog.getByText('only families with a portal login will be reminded')).toBeVisible();
     await page.keyboard.press('Escape');
 
     // Approve it at the provider, then re-check from the banner.
     await gateway.setTemplates(request, { fee_due_reminder: 'APPROVED' });
     await banner.getByRole('link', { name: 'Check again' }).click();
-    await expect(page.getByText('Fee reminders are turned off')).toHaveCount(0);
+    await expect(page.getByText('WhatsApp fee reminders are off')).toHaveCount(0);
     await expect(page.getByText('Some WhatsApp messages may not be delivered')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Send fee reminders' }).click();

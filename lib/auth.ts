@@ -16,7 +16,8 @@ export interface TenantSession {
  * renders the header, the hero and the fee table issues one query, not three.
  */
 export const getSchoolBySlug = cache(async (slug: string): Promise<School | null> => {
-  const supabase = createAnonClient();
+  // Fresh: every tenant page reads the UPI ID, branding and is_active from this.
+  const supabase = createAnonClient({ fresh: true });
   const { data, error } = await supabase
     .from('schools')
     .select('*')

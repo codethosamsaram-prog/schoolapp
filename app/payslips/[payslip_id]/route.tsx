@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { renderToStream } from '@react-pdf/renderer';
+import { pdfResponse } from '@/lib/pdf-archive';
 import { createClient } from '@/lib/supabase/server';
 import { PAYROLL_METHOD_LABELS, STAFF_ROLE_LABELS } from '@/lib/constants';
 import { periodLabel } from '@/lib/payroll';
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   ]);
   if (!staff || !school) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const stream = await renderToStream(
+  const document = (
     <PayslipPDF
       school={{
         name: school.name,
@@ -78,15 +78,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         paidOn: formatDate(slip.paid_at),
       }}
       accentColor={school.primary_color ?? '#1d4ed8'}
-    />,
+    />
   );
 
-  const download = request.nextUrl.searchParams.get('download') === '1';
-  return new NextResponse(stream as unknown as ReadableStream<Uint8Array>, {
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="${slip.slip_number}.pdf"`,
-      'Cache-Control': 'private, no-store',
-    },
+  return pdfResponse({
+    document,
+    schoolId: slip.school_id,
+    kind: 'payslips',
+    id: slip.id,
+    filename: `${slip.slip_number}.pdf`,
+    disposition: request.nextUrl.searchParams.get('download') === '1' ? 'attachment' : 'inline',
   });
 }

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { ActionResult, HomeworkAttachment, UserRole } from '@/types/database';
 import { requireTenantSession } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
-import { isTenantPath } from '@/lib/storage';
+import { deleteFile, isTenantPath } from '@/lib/storage';
 import { gradeFor } from '@/lib/grading';
 import { youtubeId } from '@/lib/youtube';
 
@@ -500,7 +500,7 @@ export async function saveSyllabus(
   }
 
   if (previous?.pdf_url && previous.pdf_url !== parsed.data.path) {
-    await supabase.storage.from('academic-docs').remove([previous.pdf_url]);
+    await deleteFile('academic-docs', [previous.pdf_url]);
   }
 
   revalidatePortal(slug, 'exams');

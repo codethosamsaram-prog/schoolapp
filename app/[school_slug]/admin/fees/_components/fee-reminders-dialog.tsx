@@ -32,15 +32,18 @@ interface FeeRemindersDialogProps {
   schoolSlug: string;
   classes: OwingClass[];
   cooldownDays: number;
-  /** False when the WhatsApp health check says reminders would not deliver. */
-  enabled: boolean;
+  /**
+   * False when the WhatsApp health check says reminders would not deliver.
+   * Reminders still go out in-app; only families without a portal login miss out.
+   */
+  whatsappReady: boolean;
 }
 
 export function FeeRemindersDialog({
   schoolSlug,
   classes,
   cooldownDays,
-  enabled,
+  whatsappReady,
 }: FeeRemindersDialogProps) {
   const [open, setOpen] = React.useState(false);
   const [classGrade, setClassGrade] = React.useState('');
@@ -62,12 +65,15 @@ export function FeeRemindersDialog({
         toast({ variant: 'destructive', title: 'Reminders not sent', description: result.error });
         return;
       }
-      const { sent, failed, recentlyReminded } = result.data;
+      const { sent, failed, recentlyReminded, inApp, whatsapp } = result.data;
       toast({
         variant: failed > 0 ? 'destructive' : 'success',
         title: `${sent} reminder${sent === 1 ? '' : 's'} sent`,
         description: [
-          failed > 0 ? `${failed} could not be delivered; check the parent numbers.` : null,
+          sent > 0 ? `${inApp} in the portal, ${whatsapp} by WhatsApp.` : null,
+          failed > 0
+            ? `${failed} could not be delivered: no portal login, and WhatsApp failed or is not set up.`
+            : null,
           recentlyReminded > 0
             ? `${recentlyReminded} skipped, reminded in the last ${cooldownDays} days.`
             : null,
@@ -91,8 +97,9 @@ export function FeeRemindersDialog({
         <DialogHeader>
           <DialogTitle>Remind families with dues</DialogTitle>
           <DialogDescription>
-            Parents get a WhatsApp message with the outstanding amount and a link to pay from the
-            portal. A family is messaged at most once every {cooldownDays} days.
+            Families with a portal login get an in-app notification with the outstanding amount;
+            the rest get a WhatsApp message. A family is reminded at most once every {cooldownDays}{' '}
+            days.
           </DialogDescription>
         </DialogHeader>
 
@@ -121,10 +128,10 @@ export function FeeRemindersDialog({
               : `${due} will be messaged; ${students - due} were reminded recently.`}
           </p>
 
-          {!enabled ? (
-            <p className="text-xs text-destructive">
-              WhatsApp is not ready to send fee reminders. The notice on this page explains what
-              to fix.
+          {!whatsappReady ? (
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              WhatsApp is not ready, so only families with a portal login will be reminded. The
+              notice on this page explains what to fix.
             </p>
           ) : null}
         </div>
@@ -133,7 +140,7 @@ export function FeeRemindersDialog({
           <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button onClick={handleSend} disabled={pending || !enabled || due === 0}>
+          <Button onClick={handleSend} disabled={pending || due === 0}>
             {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
             Send {due} reminder{due === 1 ? '' : 's'}
           </Button>

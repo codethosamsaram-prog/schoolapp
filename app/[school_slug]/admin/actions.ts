@@ -8,11 +8,11 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireTenantSession } from '@/lib/auth';
 import { USN_PATTERN, studentLoginEmail } from '@/lib/auth-routes';
-import { isTenantPath } from '@/lib/storage';
+import { deleteFile, isTenantPath } from '@/lib/storage';
 import { appUrl } from '@/lib/env';
 import { receiptPathSuffix } from '@/lib/tokens';
 import { sendFeeDueReminder, sendPaymentConfirmation } from '@/lib/whatsapp';
-import { getWhatsAppHealth } from '@/lib/whatsapp-health';
+import { notifyFamilies, notifyFamily, wasDelivered } from '@/lib/notifications';
 import { REMINDER_COOLDOWN_DAYS } from '@/lib/constants';
 import { formatINR, toLocalIndianNumber, todayInIST } from '@/lib/utils';
 
@@ -701,17 +701,27 @@ export async function recordOfflinePayment(
       .eq('id', payment.id)
       .eq('school_id', school.id);
 
-    const notification = await sendPaymentConfirmation({
-      parentPhone: student.parent_phone,
-      parentName: student.parent_name ?? 'Parent',
-      studentName: student.full_name,
-      schoolName: school.name,
-      amountPaid: formatINR(input.amount, true),
-      receiptNumber,
-      outstandingBalance: formatINR(Math.max(balance - input.amount, 0), true),
-      receiptPathSuffix: suffix,
+    const outstanding = formatINR(Math.max(balance - input.amount, 0), true);
+    const notification = await notifyFamily({
+      schoolId: school.id,
+      studentId: student.id,
+      type: 'FEE',
+      title: 'Payment received',
+      body: `${formatINR(input.amount, true)} received for ${student.full_name}. Receipt ${receiptNumber}. Outstanding: ${outstanding}.`,
+      link: `/${school.slug}/portal/fees`,
+      whatsapp: () =>
+        sendPaymentConfirmation({
+          parentPhone: student.parent_phone,
+          parentName: student.parent_name ?? 'Parent',
+          studentName: student.full_name,
+          schoolName: school.name,
+          amountPaid: formatINR(input.amount, true),
+          receiptNumber,
+          outstandingBalance: outstanding,
+          receiptPathSuffix: suffix,
+        }),
     });
-    whatsappDelivered = notification.ok;
+    whatsappDelivered = Boolean(notification.whatsapp?.ok);
   } catch (error) {
     console.error('[admin] offline payment recorded, confirmation skipped', {
       paymentId: payment.id,
@@ -877,7 +887,7 @@ export async function setStudentPhoto(
   }
 
   if (previous?.avatar_url && previous.avatar_url !== path) {
-    await supabase.storage.from('avatars').remove([previous.avatar_url]);
+    await deleteFile('avatars', [previous.avatar_url]);
   }
 
   revalidatePath(`/${schoolSlug}/admin/students`);
@@ -1124,19 +1134,22 @@ export async function voidOfflinePayment(
 }
 
 const REMINDER_BATCH_LIMIT = 500;
-const REMINDER_CONCURRENCY = 5;
 
 const reminderSchema = z.object({ classGrade: z.string().trim().max(20).optional() });
 
 /**
- * Sends the fee_due_reminder WhatsApp template to the parent of every active
- * student with a balance, optionally for one class. Families reminded in the
- * last REMINDER_COOLDOWN_DAYS are skipped, so a repeated click is harmless.
+ * Reminds the family of every active student with a balance, optionally for
+ * one class: in the portal for families with a login, by the
+ * fee_due_reminder WhatsApp template for the rest (lib/notifications.ts).
+ * Families reminded in the last REMINDER_COOLDOWN_DAYS are skipped, so a
+ * repeated click is harmless.
  */
 export async function sendFeeReminders(
   schoolSlug: string,
   formData: FormData,
-): Promise<ActionResult<{ sent: number; failed: number; recentlyReminded: number }>> {
+): Promise<
+  ActionResult<{ sent: number; failed: number; recentlyReminded: number; inApp: number; whatsapp: number }>
+> {
   const parsed = reminderSchema.safeParse({
     classGrade: formData.get('classGrade') || undefined,
   });
@@ -1145,14 +1158,6 @@ export async function sendFeeReminders(
   }
 
   const { school } = await requireTenantSession(schoolSlug, ['SUPER_ADMIN', 'SCHOOL_ADMIN']);
-
-  const health = await getWhatsAppHealth();
-  if (!health.remindersReady) {
-    return {
-      ok: false,
-      error: health.issues[0] ?? 'WhatsApp is not ready to send fee reminders.',
-    };
-  }
 
   const supabase = createClient();
   const cutoff = Date.now() - REMINDER_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
@@ -1178,13 +1183,15 @@ export async function sendFeeReminders(
   );
   const recentlyReminded = (owing ?? []).length - due.length;
 
-  const delivered: string[] = [];
-  let failed = 0;
-
-  for (let start = 0; start < due.length; start += REMINDER_CONCURRENCY) {
-    const batch = due.slice(start, start + REMINDER_CONCURRENCY);
-    const results = await Promise.all(
-      batch.map((student) =>
+  const outcomes = await notifyFamilies(
+    due.map((student) => ({
+      schoolId: school.id,
+      studentId: student.id,
+      type: 'FEE' as const,
+      title: 'Fee payment due',
+      body: `${formatINR(student.current_balance, true)} is outstanding towards fees for ${student.full_name}. You can pay from the portal.`,
+      link: `/${school.slug}/portal/fees`,
+      whatsapp: () =>
         sendFeeDueReminder({
           parentPhone: student.parent_phone,
           parentName: student.parent_name ?? 'Parent',
@@ -1193,13 +1200,13 @@ export async function sendFeeReminders(
           outstandingBalance: formatINR(student.current_balance, true),
           portalPathSuffix: `${school.slug}/portal/fees`,
         }),
-      ),
-    );
-    results.forEach((result, index) => {
-      if (result.ok) delivered.push(batch[index].id);
-      else failed += 1;
-    });
-  }
+    })),
+  );
+
+  const delivered = due.filter((_, index) => wasDelivered(outcomes[index])).map((student) => student.id);
+  const failed = due.length - delivered.length;
+  const inApp = outcomes.filter((outcome) => outcome.inApp > 0).length;
+  const whatsapp = outcomes.filter((outcome) => outcome.whatsapp?.ok).length;
 
   if (delivered.length > 0) {
     const { error: stampError } = await supabase
@@ -1215,5 +1222,5 @@ export async function sendFeeReminders(
 
   revalidatePath(`/${schoolSlug}/admin/fees`);
 
-  return { ok: true, data: { sent: delivered.length, failed, recentlyReminded } };
+  return { ok: true, data: { sent: delivered.length, failed, recentlyReminded, inApp, whatsapp } };
 }

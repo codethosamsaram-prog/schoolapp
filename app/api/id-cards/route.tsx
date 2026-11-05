@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getCurrentProfile } from '@/lib/auth';
 import { canManageSchool } from '@/lib/auth-routes';
 import { createClient } from '@/lib/supabase/server';
+import { downloadFile } from '@/lib/storage';
 import { MAX_CARDS_PER_BATCH, loadIdCardData, qrPng } from '@/lib/id-cards';
 import { IdCardsPDF } from '@/components/pdf/IdCardsPDF';
 
@@ -56,11 +57,7 @@ export async function GET(request: NextRequest) {
   // Photos and QR codes go in as bytes so the renderer never fetches a URL.
   const cards = await Promise.all(
     data.students.map(async (student) => {
-      let photo: Buffer | null = null;
-      if (student.avatarPath) {
-        const { data: blob } = await supabase.storage.from('avatars').download(student.avatarPath);
-        if (blob) photo = Buffer.from(await blob.arrayBuffer());
-      }
+      const photo = student.avatarPath ? await downloadFile(supabase, 'avatars', student.avatarPath) : null;
       return { ...student, photo, qr: await qrPng(student.id) };
     }),
   );

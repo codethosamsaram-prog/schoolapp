@@ -13,7 +13,9 @@ import {
   UserRound,
   type LucideIcon,
   CalendarOff,
- } from 'lucide-react';
+  Bell,
+  QrCode,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Item {
@@ -28,7 +30,13 @@ interface Group {
 }
 
 const GROUPS: Group[] = [
-  { label: 'Overview', items: [{ href: '', label: 'Home', icon: Home }] },
+  {
+    label: 'Overview',
+    items: [
+      { href: '', label: 'Home', icon: Home },
+      { href: '/notifications', label: 'Notifications', icon: Bell },
+    ],
+  },
   {
     label: 'Academic hub',
     items: [
@@ -38,7 +46,13 @@ const GROUPS: Group[] = [
     ],
   },
   { label: 'Exams & performance', items: [{ href: '/exams', label: 'Hall tickets & results', icon: Trophy }] },
-  { label: 'Fees & payments', items: [{ href: '/fees', label: 'Fees & receipts', icon: IndianRupee }] },
+  {
+    label: 'Fees & payments',
+    items: [
+      { href: '/fees', label: 'Fees & receipts', icon: IndianRupee },
+      { href: '/pay-upi', label: 'Pay by UPI', icon: QrCode },
+    ],
+  },
   {
     label: 'Personal',
     items: [

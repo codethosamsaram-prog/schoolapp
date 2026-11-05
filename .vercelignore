@@ -1,0 +1,11 @@
+# Secrets and local state never go to Vercel. Production values are set as
+# Vercel environment variables, and .env.production holds the DB password.
+.env
+.env.*
+!.env.example
+backups
+logs
+e2e
+test-results
+playwright-report
+.next-e2e

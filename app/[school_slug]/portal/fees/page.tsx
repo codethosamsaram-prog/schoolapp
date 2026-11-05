@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
-import { Download, FileText } from 'lucide-react';
+import Link from 'next/link';
+import { Download, FileText, QrCode } from 'lucide-react';
 import type { FeeStructure, PaymentStatus } from '@/types/database';
+import { publicEnv } from '@/lib/env';
 import { getPortalContext } from '@/lib/portal';
 import { createClient } from '@/lib/supabase/server';
 import { PAYMENT_STATUS_STYLES, isSettledPayment, netPaid, paymentStatusLabel } from '@/lib/constants';
@@ -106,7 +108,7 @@ export default async function PortalFeesPage({ params }: PageProps) {
               </dd>
             </div>
           </dl>
-          {balance > 0 ? (
+          {balance > 0 && publicEnv.razorpayKeyId ? (
             <PayButton
               studentId={active.id}
               studentName={active.fullName}
@@ -114,6 +116,14 @@ export default async function PortalFeesPage({ params }: PageProps) {
               schoolName={school.name}
               prefill={{ name: profile.full_name, email: profile.email, contact: profile.phone }}
             />
+          ) : balance > 0 ? (
+            <Link
+              href={`/${school.slug}/portal/pay-upi`}
+              className="inline-flex items-center justify-center gap-2 justify-self-start rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              <QrCode className="h-4 w-4" aria-hidden />
+              Pay by UPI
+            </Link>
           ) : (
             <Badge variant="secondary" className="justify-self-start">
               Fully paid

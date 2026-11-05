@@ -41,7 +41,7 @@ export function WhatsAppHealthBanner({ health, recheckHref }: WhatsAppHealthBann
           <div className="min-w-0 space-y-2">
             <h2 id="whatsapp-health-title" className="font-semibold">
               {blocking
-                ? 'Fee reminders are turned off until WhatsApp is set up'
+                ? 'WhatsApp fee reminders are off until WhatsApp is set up'
                 : 'Some WhatsApp messages may not be delivered'}
             </h2>
             <ul className="list-disc space-y-1 pl-5">

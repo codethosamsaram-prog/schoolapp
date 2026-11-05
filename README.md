@@ -144,12 +144,17 @@ more query overhead.
    the migrations: `npx supabase link --project-ref <ref>` and `npx supabase db push`.
 2. **Auth.** Turn off **Allow new users to sign up**. Enable the access token hook
    (`public.custom_access_token_hook`) under **Authentication → Hooks**.
-3. **Environment.** Set every variable in `.env.example` on the Vercel project for Production.
+3. **Environment.** Set the variables in `.env.example` on the Vercel project for Production.
    `NEXT_PUBLIC_APP_URL` is the school-facing https origin. Generate `RECEIPT_TOKEN_SECRET` with
-   `openssl rand -hex 32`. Add the Upstash variables so rate limits are shared across instances.
+   `openssl rand -hex 32`. Razorpay and WhatsApp are optional: without them, families pay by direct
+   UPI and notifications stay in-app. Upstash is optional too, and is only called for payment and
+   payroll routes.
+   To use Cloudflare R2, set `STORAGE_PROVIDER=r2` and the `R2_*` variables, and allow `PUT` and
+   `GET` with the `Content-Type` header from your origin in the bucket's CORS policy. Switching
+   provider does not copy existing files.
 4. **Pre-flight.** `npm run build` runs `scripts/check-env.mjs` first. On a Vercel production
    build (`VERCEL_ENV=production`) it stops the deploy on anything unsafe:
-   - missing keys, or placeholder and test values,
+   - missing keys, half-configured integrations, or placeholder and test values,
    - the local `supabase start` keys or JWT secret,
    - http or localhost URLs,
    - a secret behind a `NEXT_PUBLIC_` prefix, which would ship it to browsers,
@@ -159,7 +164,7 @@ more query overhead.
 
    Check a file by hand with `node scripts/check-env.mjs --production --file .env.production`.
    Locally and on preview builds it only reports.
-5. **Integrations.** Point the Razorpay webhook at `https://<domain>/api/webhooks/razorpay` (events
+5. **Integrations (if used).** Point the Razorpay webhook at `https://<domain>/api/webhooks/razorpay` (events
    under Payments). Get the WhatsApp templates approved and check **Admin → Fees** for the health
    banner.
 6. **First login.** `node --env-file=.env.production scripts/create-user.mjs --role SCHOOL_ADMIN …`.

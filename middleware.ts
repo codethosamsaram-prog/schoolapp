@@ -77,6 +77,8 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Signed-in callers are limited per account, everyone else per address.
+  // Money routes count in Upstash; the rest in this instance's memory
+  // (lib/edge-rate-limit.ts).
   const rule = rateLimitRuleFor(pathname);
   if (rule) {
     const decision = await checkRateLimit(user ? `user:${user.id}` : `ip:${clientIp(request)}`, rule);

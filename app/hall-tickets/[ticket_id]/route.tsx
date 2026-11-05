@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { renderToStream } from '@react-pdf/renderer';
 import { createClient } from '@/lib/supabase/server';
+import { downloadFile, signedUrl } from '@/lib/storage';
 import { formatDate } from '@/lib/utils';
 import { HallTicketPDF } from '@/components/pdf/HallTicketPDF';
 
@@ -39,11 +40,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 
   if (ticket.ticket_pdf_url) {
-    const { data: signed } = await supabase.storage
-      .from('academic-docs')
-      .createSignedUrl(ticket.ticket_pdf_url, 300);
-    if (!signed?.signedUrl) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.redirect(signed.signedUrl);
+    const signed = await signedUrl(supabase, 'academic-docs', ticket.ticket_pdf_url, 300);
+    if (!signed) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.redirect(signed);
   }
 
   const [{ data: student }, { data: school }] = await Promise.all([
@@ -65,11 +64,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 
   // Embed the photo as bytes so the PDF renderer never fetches a URL itself.
-  let photo: Buffer | null = null;
-  if (student.avatar_url) {
-    const { data: blob } = await supabase.storage.from('avatars').download(student.avatar_url);
-    if (blob) photo = Buffer.from(await blob.arrayBuffer());
-  }
+  const photo = student.avatar_url ? await downloadFile(supabase, 'avatars', student.avatar_url) : null;
 
   const { data: holidays } = await supabase
     .from('holiday_calendar')

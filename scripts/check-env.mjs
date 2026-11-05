@@ -76,28 +76,68 @@ const REQUIRED = [
   ['SUPABASE_SERVICE_ROLE_KEY', 'Supabase service role key'],
   ['NEXT_PUBLIC_APP_URL', 'public origin, used in receipt links'],
   ['RECEIPT_TOKEN_SECRET', 'HMAC key for signed receipt links'],
-  ['RAZORPAY_KEY_ID', 'Razorpay key id'],
-  ['RAZORPAY_KEY_SECRET', 'Razorpay key secret'],
-  ['RAZORPAY_WEBHOOK_SECRET', 'Razorpay webhook secret'],
 ];
 
 const whatsappProvider = get('WHATSAPP_PROVIDER') || 'meta';
-if (whatsappProvider === 'interakt') {
-  REQUIRED.push(['INTERAKT_API_KEY', 'Interakt API key']);
-} else {
+
+/**
+ * Paid integrations the app runs without: families pay by direct UPI and hear
+ * from the school in-app. Each may be left out whole, but half a set is a
+ * mistake, so that is treated like a missing required variable.
+ */
+const OPTIONAL_GROUPS = [
+  {
+    name: 'Razorpay',
+    without: 'online gateway payments are off, and families pay by direct UPI',
+    variables: [
+      ['RAZORPAY_KEY_ID', 'Razorpay key id'],
+      ['NEXT_PUBLIC_RAZORPAY_KEY_ID', 'Razorpay key id for the browser'],
+      ['RAZORPAY_KEY_SECRET', 'Razorpay key secret'],
+      ['RAZORPAY_WEBHOOK_SECRET', 'Razorpay webhook secret'],
+    ],
+  },
+  {
+    name: 'WhatsApp',
+    without: 'notifications stay in-app, and CRITICAL ones cannot reach WhatsApp',
+    variables:
+      whatsappProvider === 'interakt'
+        ? [['INTERAKT_API_KEY', 'Interakt API key']]
+        : [
+            ['WHATSAPP_PHONE_NUMBER_ID', 'WhatsApp phone number id'],
+            ['WHATSAPP_ACCESS_TOKEN', 'WhatsApp access token'],
+          ],
+  },
+];
+
+const storageChoice = get('STORAGE_PROVIDER').toLowerCase();
+if (storageChoice && storageChoice !== 'r2' && storageChoice !== 'supabase') {
+  errors.push('STORAGE_PROVIDER must be r2 or supabase.');
+}
+if (storageChoice === 'r2') {
   REQUIRED.push(
-    ['WHATSAPP_PHONE_NUMBER_ID', 'WhatsApp phone number id'],
-    ['WHATSAPP_ACCESS_TOKEN', 'WhatsApp access token'],
+    ['R2_BUCKET', 'Cloudflare R2 bucket'],
+    ['R2_ACCESS_KEY_ID', 'Cloudflare R2 access key id'],
+    ['R2_SECRET_ACCESS_KEY', 'Cloudflare R2 secret access key'],
   );
+  if (!get('R2_ACCOUNT_ID') && !get('R2_ENDPOINT')) problem('R2_ACCOUNT_ID is not set (Cloudflare account id).');
 }
 
 for (const [name, purpose] of REQUIRED) {
   if (!get(name)) problem(`${name} is not set (${purpose}).`);
 }
 
+for (const group of OPTIONAL_GROUPS) {
+  const missing = group.variables.filter(([name]) => !get(name));
+  if (missing.length === group.variables.length) {
+    if (production) warnings.push(`${group.name} is not configured: ${group.without}.`);
+    continue;
+  }
+  for (const [name, purpose] of missing) problem(`${name} is not set (${purpose}), but other ${group.name} variables are.`);
+}
+
 // Values copied from .env.example or used by the local stack and the tests.
 const PLACEHOLDER = /(^|[^a-z])(x{6,}|change-?me|your[-_]|placeholder|example|e2e[-_]|dummy)|\.\.\.$/i;
-for (const [name] of REQUIRED) {
+for (const [name] of [...REQUIRED, ...OPTIONAL_GROUPS.flatMap((group) => group.variables)]) {
   if (get(name) && PLACEHOLDER.test(get(name))) productionOnly(`${name} still holds a placeholder or test value.`);
 }
 
@@ -189,7 +229,7 @@ for (const name of ['RAZORPAY_API_BASE_URL', 'WHATSAPP_GRAPH_BASE_URL', 'NEXT_DI
 
 if (production && !(get('UPSTASH_REDIS_REST_URL') && get('UPSTASH_REDIS_REST_TOKEN'))) {
   warnings.push(
-    'UPSTASH_REDIS_REST_URL/TOKEN are not set; API rate limits fall back to per-instance memory, which each serverless instance counts separately.',
+    'UPSTASH_REDIS_REST_URL/TOKEN are not set; payment and payroll rate limits fall back to per-instance memory, which each serverless instance counts separately.',
   );
 }
 

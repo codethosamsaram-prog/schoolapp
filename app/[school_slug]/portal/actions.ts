@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import type { ActionResult } from '@/types/database';
 import { activeStudentCookie, getPortalContext } from '@/lib/portal';
+import { createClient } from '@/lib/supabase/server';
 
 /**
  * Switches which child the portal shows. The id must be one of the caller's
@@ -33,4 +34,33 @@ export async function setActiveStudent(
 
   revalidatePath(`/${schoolSlug}/portal`, 'layout');
   return { ok: true, data: { studentId } };
+}
+
+/**
+ * Marks the caller's notifications read: the given ids, or all of them.
+ * Runs on the caller's session, where RLS and the column grant allow
+ * nothing but flipping is_read on their own rows.
+ */
+export async function markNotificationsRead(
+  schoolSlug: string,
+  ids?: string[],
+): Promise<ActionResult<{ updated: number }>> {
+  if (ids && !z.array(z.string().uuid()).max(200).safeParse(ids).success) {
+    return { ok: false, error: 'Unknown notification.' };
+  }
+
+  const { userId } = await getPortalContext(schoolSlug);
+  const supabase = createClient();
+
+  let request = supabase.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('is_read', false);
+  if (ids) request = request.in('id', ids);
+  const { data, error } = await request.select('id');
+
+  if (error) {
+    console.error('[portal] mark read failed', { error: error.message });
+    return { ok: false, error: 'Could not update your notifications. Please try again.' };
+  }
+
+  revalidatePath(`/${schoolSlug}/portal`, 'layout');
+  return { ok: true, data: { updated: data?.length ?? 0 } };
 }
